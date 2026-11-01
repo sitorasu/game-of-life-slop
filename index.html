@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conway's Game of Life Simulator</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Phosphor Icons for modern sleek icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <style>
+    /* Custom styling for sleek sliders and custom scrollbars */
+    input[type=range] {
+      accent-color: #38bdf8;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans select-none overflow-x-hidden">
+
+  <!-- Header -->
+  <header class="bg-slate-900/90 border-b border-slate-800 backdrop-blur px-6 py-3 flex items-center justify-between z-10 sticky top-0">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 text-slate-950 font-black text-lg">
+        <i class="ph-bold ph-grid-four"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold tracking-wide text-white flex items-center gap-2">
+          Conway's Game of Life
+          <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/60 font-medium">Simulator</span>
+        </h1>
+        <p class="text-xs text-slate-400">セル・オートマトン シミュレータ</p>
+      </div>
+    </div>
+
+    <!-- Quick Stats in Header -->
+    <div class="flex items-center gap-4 text-xs">
+      <div class="bg-slate-800/70 border border-slate-700/60 rounded-lg px-3 py-1.5 flex items-center gap-2">
+        <span class="text-slate-400">世代:</span>
+        <span id="stat-generation" class="font-mono font-semibold text-cyan-400 text-sm">0</span>
+      </div>
+      <div class="bg-slate-800/70 border border-slate-700/60 rounded-lg px-3 py-1.5 flex items-center gap-2">
+        <span class="text-slate-400">生存セル数:</span>
+        <span id="stat-population" class="font-mono font-semibold text-emerald-400 text-sm">0</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <div class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+
+    <!-- Canvas Area -->
+    <main class="flex-1 flex flex-col items-center justify-center p-4 bg-slate-950/60 relative overflow-auto">
+      <div id="canvas-container" class="relative rounded-xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden transition-all duration-300">
+        <canvas id="life-canvas" class="block cursor-crosshair"></canvas>
+      </div>
+
+      <!-- Quick Canvas Overlay Controls -->
+      <div class="mt-4 flex flex-wrap items-center justify-center gap-2 z-10">
+        <button id="btn-play" class="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold transition shadow-lg shadow-cyan-500/25 active:scale-95">
+          <i id="icon-play" class="ph-bold ph-play text-lg"></i>
+          <span id="text-play">スタート</span>
+        </button>
+        <button id="btn-step" class="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium transition active:scale-95">
+          <i class="ph-bold ph-arrow-right text-base"></i>
+          1ステップ進める
+        </button>
+        <button id="btn-random" class="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium transition active:scale-95">
+          <i class="ph-bold ph-shuffle text-base"></i>
+          ランダム配置
+        </button>
+        <button id="btn-clear" class="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/40 font-medium transition active:scale-95">
+          <i class="ph-bold ph-trash text-base"></i>
+          クリア
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-500 mt-2 text-center">
+        💡 キャンバス上をクリックまたはドラッグしてセルを描画・消去できます
+      </p>
+    </main>
+
+    <!-- Sidebar Controls -->
+    <aside class="w-full lg:w-80 bg-slate-900/80 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col p-5 gap-6 overflow-y-auto max-h-[45vh] lg:max-h-none">
+      
+      <!-- Simulation Speed -->
+      <div class="space-y-2">
+        <div class="flex justify-between items-center text-sm font-medium">
+          <label for="speed-slider" class="text-slate-300 flex items-center gap-1.5">
+            <i class="ph-bold ph-gauge text-cyan-400"></i> 更新速度 (FPS)
+          </label>
+          <span id="speed-display" class="font-mono text-cyan-400 text-xs font-semibold">20 FPS</span>
+        </div>
+        <input id="speed-slider" type="range" min="1" max="60" value="20" class="w-full h-1.5 bg-slate-800 rounded-lg cursor-pointer">
+      </div>
+
+      <!-- Boundary Conditions -->
+      <div class="space-y-2">
+        <label class="text-sm font-medium text-slate-300 flex items-center gap-1.5">
+          <i class="ph-bold ph-corners-out text-cyan-400"></i> 境界条件
+        </label>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="boundary-torus" class="py-2 px-3 text-xs font-semibold rounded-lg border border-cyan-500/50 bg-cyan-950/60 text-cyan-300 transition flex items-center justify-center gap-1.5 shadow-sm">
+            <i class="ph-bold ph-arrows-clockwise text-sm"></i>
+            周期境界 (トーラス)
+          </button>
+          <button id="boundary-dead" class="py-2 px-3 text-xs font-semibold rounded-lg border border-slate-700 bg-slate-800/60 text-slate-400 hover:text-slate-200 transition flex items-center justify-center gap-1.5">
+            <i class="ph-bold ph-wall text-sm"></i>
+            固定境界 (壁)
+          </button>
+        </div>
+        <p class="text-[11px] text-slate-500 leading-tight">
+          周期境界: 端を越えたセルが反対側から出現します。<br>
+          固定境界: 外側を常に死滅セルとして扱います。
+        </p>
+      </div>
+
+      <!-- Presets -->
+      <div class="space-y-2">
+        <label class="text-sm font-medium text-slate-300 flex items-center gap-1.5">
+          <i class="ph-bold ph-shapes text-cyan-400"></i> パターンプリセット
+        </label>
+        <div class="grid grid-cols-2 gap-2">
+          <button class="preset-btn px-3 py-2 text-xs font-medium bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 rounded-lg border border-slate-700/80 transition text-left flex flex-col" data-pattern="glider">
+            <span class="font-semibold text-slate-200">グライダー</span>
+            <span class="text-[10px] text-slate-400">斜めに移動する移動体</span>
+          </button>
+          <button class="preset-btn px-3 py-2 text-xs font-medium bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 rounded-lg border border-slate-700/80 transition text-left flex flex-col" data-pattern="pulsar">
+            <span class="font-semibold text-slate-200">パルサー</span>
+            <span class="text-[10px] text-slate-400">周期3の大振動子</span>
+          </button>
+          <button class="preset-btn px-3 py-2 text-xs font-medium bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 rounded-lg border border-slate-700/80 transition text-left flex flex-col" data-pattern="penta">
+            <span class="font-semibold text-slate-200">ペンタデカスロン</span>
+            <span class="text-[10px] text-slate-400">周期15の長周期振動子</span>
+          </button>
+          <button class="preset-btn px-3 py-2 text-xs font-medium bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 rounded-lg border border-slate-700/80 transition text-left flex flex-col" data-pattern="gun">
+            <span class="font-semibold text-slate-200">ゴスパー銃</span>
+            <span class="text-[10px] text-slate-400">無限にグライダーを生成</span>
+          </button>
+          <button class="preset-btn col-span-2 px-3 py-2 text-xs font-medium bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 rounded-lg border border-slate-700/80 transition text-left flex flex-col" data-pattern="acorn">
+            <span class="font-semibold text-slate-200">どんぐり (Acorn)</span>
+            <span class="text-[10px] text-slate-400">わずか7セルから5000世代以上爆発的に増殖</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Grid Configuration -->
+      <div class="space-y-3 pt-2 border-t border-slate-800">
+        <label class="text-sm font-medium text-slate-300 flex items-center gap-1.5">
+          <i class="ph-bold ph-sliders text-cyan-400"></i> グリッドサイズ設定
+        </label>
+        
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">横幅 (列数)</label>
+            <input id="input-cols" type="number" min="10" max="200" value="60" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500">
+          </div>
+          <div>
+            <label class="text-xs text-slate-400 block mb-1">縦幅 (行数)</label>
+            <input id="input-rows" type="number" min="10" max="200" value="40" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500">
+          </div>
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center text-xs mb-1">
+            <label class="text-slate-400">セル表示サイズ (px)</label>
+            <span id="cell-size-display" class="font-mono text-cyan-400 font-semibold">14px</span>
+          </div>
+          <input id="cell-size-slider" type="range" min="6" max="28" value="14" class="w-full h-1.5 bg-slate-800 rounded-lg cursor-pointer">
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center text-xs mb-1">
+            <label class="text-slate-400">初期ランダム密度</label>
+            <span id="density-display" class="font-mono text-cyan-400 font-semibold">20%</span>
+          </div>
+          <input id="density-slider" type="range" min="5" max="75" value="20" class="w-full h-1.5 bg-slate-800 rounded-lg cursor-pointer">
+        </div>
+
+        <button id="btn-apply-grid" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 rounded-lg text-xs font-semibold transition active:scale-95 flex items-center justify-center gap-1.5">
+          <i class="ph-bold ph-check"></i> サイズを再適用してリセット
+        </button>
+      </div>
+
+      <!-- Color / Style Theme -->
+      <div class="space-y-2 pt-2 border-t border-slate-800">
+        <label class="text-sm font-medium text-slate-300 flex items-center gap-1.5">
+          <i class="ph-bold ph-palette text-cyan-400"></i> カラーテーマ
+        </label>
+        <select id="select-theme" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500">
+          <option value="cyan">サイバー・シアン (デフォルト)</option>
+          <option value="emerald">バイオ・エメラルド</option>
+          <option value="amber">アンバー・オレンジ</option>
+          <option value="purple">ネオン・パープル</option>
+          <option value="monochrome">ミニマル・ホワイト</option>
+        </select>
+      </div>
+
+    </aside>
+  </div>
+
+  <script>
+    // State management
+    const state = {
+      cols: 60,
+      rows: 40,
+      cellSize: 14,
+      boundary: 'torus', // 'torus' or 'dead'
+      fps: 20,
+      randomDensity: 0.20,
+      isRunning: false,
+      generation: 0,
+      population: 0,
+      theme: 'cyan',
+      grid: [],
+      nextGrid: [],
+      isDrawing: false,
+      drawMode: 1 // 1: make alive, 0: kill
+    };
+
+    // Themes definition
+    const THEMES = {
+      cyan: {
+        alive: '#22d3ee',
+        dead: '#090d16',
+        gridLine: '#1e293b'
+      },
+      emerald: {
+        alive: '#34d399',
+        dead: '#06130e',
+        gridLine: '#133527'
+      },
+      amber: {
+        alive: '#fbbf24',
+        dead: '#160e05',
+        gridLine: '#33230e'
+      },
+      purple: {
+        alive: '#c084fc',
+        dead: '#12081d',
+        gridLine: '#2e1945'
+      },
+      monochrome: {
+        alive: '#f8fafc',
+        dead: '#0f172a',
+        gridLine: '#1e293b'
+      }
+    };
+
+    // DOM Elements
+    const canvas = document.getElementById('life-canvas');
+    const ctx = canvas.getContext('2d');
+    const btnPlay = document.getElementById('btn-play');
+    const iconPlay = document.getElementById('icon-play');
+    const textPlay = document.getElementById('text-play');
+    const btnStep = document.getElementById('btn-step');
+    const btnRandom = document.getElementById('btn-random');
+    const btnClear = document.getElementById('btn-clear');
+    const btnApplyGrid = document.getElementById('btn-apply-grid');
+    const boundaryTorusBtn = document.getElementById('boundary-torus');
+    const boundaryDeadBtn = document.getElementById('boundary-dead');
+    const speedSlider = document.getElementById('speed-slider');
+    const speedDisplay = document.getElementById('speed-display');
+    const inputCols = document.getElementById('input-cols');
+    const inputRows = document.getElementById('input-rows');
+    const cellSizeSlider = document.getElementById('cell-size-slider');
+    const cellSizeDisplay = document.getElementById('cell-size-display');
+    const densitySlider = document.getElementById('density-slider');
+    const densityDisplay = document.getElementById('density-display');
+    const selectTheme = document.getElementById('select-theme');
+    const statGen = document.getElementById('stat-generation');
+    const statPop = document.getElementById('stat-population');
+    const presetBtns = document.querySelectorAll('.preset-btn');
+
+    // Create a 2D Array
+    function create2DArray(cols, rows) {
+      const arr = new Array(cols);
+      for (let i = 0; i < cols; i++) {
+        arr[i] = new Uint8Array(rows);
+      }
+      return arr;
+    }
+
+    // Initialize or Resize Grid
+    function initGrid() {
+      state.cols = parseInt(inputCols.value, 10);
+      state.rows = parseInt(inputRows.value, 10);
+      state.cellSize = parseInt(cellSizeSlider.value, 10);
+
+      canvas.width = state.cols * state.cellSize;
+      canvas.height = state.rows * state.cellSize;
+
+      state.grid = create2DArray(state.cols, state.rows);
+      state.nextGrid = create2DArray(state.cols, state.rows);
+      state.generation = 0;
+      updateStats();
+      draw();
+    }
+
+    // Update Population Count & Stats UI
+    function updateStats() {
+      let count = 0;
+      for (let x = 0; x < state.cols; x++) {
+        for (let y = 0; y < state.rows; y++) {
+          if (state.grid[x][y] === 1) count++;
+        }
+      }
+      state.population = count;
+      statGen.textContent = state.generation.toLocaleString();
+      statPop.textContent = state.population.toLocaleString();
+    }
+
+    // Count Neighbors with boundary conditions
+    function countNeighbors(x, y) {
+      let sum = 0;
+      for (let i = -1; i <= 1; i++) {
+        for (let j = -1; j <= 1; j++) {
+          if (i === 0 && j === 0) continue;
+
+          let nx = x + i;
+          let ny = y + j;
+
+          if (state.boundary === 'torus') {
+            // Periodic wrapping
+            nx = (nx + state.cols) % state.cols;
+            ny = (ny + state.rows) % state.rows;
+            sum += state.grid[nx][ny];
+          } else {
+            // Fixed dead border
+            if (nx >= 0 && nx < state.cols && ny >= 0 && ny < state.rows) {
+              sum += state.grid[nx][ny];
+            }
+          }
+        }
+      }
+      return sum;
+    }
+
+    // Conway's Rule step
+    function step() {
+      for (let x = 0; x < state.cols; x++) {
+        for (let y = 0; y < state.rows; y++) {
+          const neighbors = countNeighbors(x, y);
+          const current = state.grid[x][y];
+
+          // Conway's rules
+          if (current === 1) {
+            if (neighbors === 2 || neighbors === 3) {
+              state.nextGrid[x][y] = 1; // survives
+            } else {
+              state.nextGrid[x][y] = 0; // underpopulation or overpopulation
+            }
+          } else {
+            if (neighbors === 3) {
+              state.nextGrid[x][y] = 1; // reproduction
+            } else {
+              state.nextGrid[x][y] = 0;
+            }
+          }
+        }
+      }
+
+      // Swap grids
+      const temp = state.grid;
+      state.grid = state.nextGrid;
+      state.nextGrid = temp;
+
+      state.generation++;
+      updateStats();
+      draw();
+    }
+
+    // Render Canvas
+    function draw() {
+      const theme = THEMES[state.theme];
+      const cs = state.cellSize;
+
+      // Clear background
+      ctx.fillStyle = theme.dead;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Grid Lines if cell size is big enough
+      if (cs >= 5) {
+        ctx.strokeStyle = theme.gridLine;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        for (let x = 0; x <= state.cols; x++) {
+          ctx.moveTo(x * cs, 0);
+          ctx.lineTo(x * cs, canvas.height);
+        }
+        for (let y = 0; y <= state.rows; y++) {
+          ctx.moveTo(0, y * cs);
+          ctx.lineTo(canvas.width, y * cs);
+        }
+        ctx.stroke();
+      }
+
+      // Draw Alive Cells with subtle rounded rectangles
+      ctx.fillStyle = theme.alive;
+      const padding = cs > 6 ? 1 : 0;
+      const innerSize = cs - padding * 2;
+      const radius = cs > 10 ? 2 : 0;
+
+      for (let x = 0; x < state.cols; x++) {
+        for (let y = 0; y < state.rows; y++) {
+          if (state.grid[x][y] === 1) {
+            const px = x * cs + padding;
+            const py = y * cs + padding;
+            if (radius > 0) {
+              drawRoundedRect(ctx, px, py, innerSize, innerSize, radius);
+            } else {
+              ctx.fillRect(px, py, innerSize, innerSize);
+            }
+          }
+        }
+      }
+    }
+
+    function drawRoundedRect(ctx, x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Animation Loop
+    let lastTime = 0;
+    function loop(currentTime) {
+      if (!state.isRunning) return;
+
+      const interval = 1000 / state.fps;
+      const elapsed = currentTime - lastTime;
+
+      if (elapsed > interval) {
+        lastTime = currentTime - (elapsed % interval);
+        step();
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    // Play / Pause handling
+    function setRunning(running) {
+      state.isRunning = running;
+      if (state.isRunning) {
+        btnPlay.classList.replace('bg-cyan-500', 'bg-amber-500');
+        btnPlay.classList.replace('hover:bg-cyan-400', 'hover:bg-amber-400');
+        iconPlay.classList.replace('ph-play', 'ph-pause');
+        textPlay.textContent = '停止';
+        lastTime = performance.now();
+        requestAnimationFrame(loop);
+      } else {
+        btnPlay.classList.replace('bg-amber-500', 'bg-cyan-500');
+        btnPlay.classList.replace('hover:bg-amber-400', 'hover:bg-cyan-400');
+        iconPlay.classList.replace('ph-pause', 'ph-play');
+        textPlay.textContent = 'スタート';
+      }
+    }
+
+    // Randomize
+    function randomize() {
+      for (let x = 0; x < state.cols; x++) {
+        for (let y = 0; y < state.rows; y++) {
+          state.grid[x][y] = Math.random() < state.randomDensity ? 1 : 0;
+        }
+      }
+      state.generation = 0;
+      updateStats();
+      draw();
+    }
+
+    // Clear
+    function clearGrid() {
+      for (let x = 0; x < state.cols; x++) {
+        for (let y = 0; y < state.rows; y++) {
+          state.grid[x][y] = 0;
+        }
+      }
+      state.generation = 0;
+      updateStats();
+      draw();
+    }
+
+    // Presets Injection
+    const PATTERNS = {
+      glider: [
+        [0, 1, 0],
+        [0, 0, 1],
+        [1, 1, 1]
+      ],
+      pulsar: [
+        [0,0,1,1,1,0,0,0,1,1,1,0,0],
+        [0,0,0,0,0,0,0,0,0,0,0,0,0],
+        [1,0,0,0,0,1,0,1,0,0,0,0,1],
+        [1,0,0,0,0,1,0,1,0,0,0,0,1],
+        [1,0,0,0,0,1,0,1,0,0,0,0,1],
+        [0,0,1,1,1,0,0,0,1,1,1,0,0],
+        [0,0,0,0,0,0,0,0,0,0,0,0,0],
+        [0,0,1,1,1,0,0,0,1,1,1,0,0],
+        [1,0,0,0,0,1,0,1,0,0,0,0,1],
+        [1,0,0,0,0,1,0,1,0,0,0,0,1],
+        [1,0,0,0,0,1,0,1,0,0,0,0,1],
+        [0,0,0,0,0,0,0,0,0,0,0,0,0],
+        [0,0,1,1,1,0,0,0,1,1,1,0,0]
+      ],
+      penta: [
+        [1, 1, 1],
+        [1, 0, 1],
+        [1, 1, 1],
+        [1, 1, 1],
+        [1, 1, 1],
+        [1, 1, 1],
+        [1, 0, 1],
+        [1, 1, 1]
+      ],
+      acorn: [
+        [0, 1, 0, 0, 0, 0, 0],
+        [0, 0, 0, 1, 0, 0, 0],
+        [1, 1, 0, 0, 1, 1, 1]
+      ],
+      gun: [
+        // Gosper Glider Gun (36x9)
+        [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+        [0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
+        [1,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        [1,1,0,0,0,0,0,0,0,0,1,0,0,0,1,0,1,1,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+      ]
+    };
+
+    function loadPreset(patternKey) {
+      setRunning(false);
+      clearGrid();
+      const pattern = PATTERNS[patternKey];
+      if (!pattern) return;
+
+      const pHeight = pattern.length;
+      const pWidth = pattern[0].length;
+
+      const startX = Math.floor((state.cols - pWidth) / 2);
+      const startY = Math.floor((state.rows - pHeight) / 2);
+
+      for (let r = 0; r < pHeight; r++) {
+        for (let c = 0; c < pWidth; c++) {
+          const gx = startX + c;
+          const gy = startY + r;
+          if (gx >= 0 && gx < state.cols && gy >= 0 && gy < state.rows) {
+            state.grid[gx][gy] = pattern[r][c];
+          }
+        }
+      }
+      state.generation = 0;
+      updateStats();
+      draw();
+    }
+
+    // Mouse & Touch Interaction on Canvas
+    function getCellCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+      const x = Math.floor(((clientX - rect.left) * scaleX) / state.cellSize);
+      const y = Math.floor(((clientY - rect.top) * scaleY) / state.cellSize);
+
+      return { x, y };
+    }
+
+    function handleStartDraw(e) {
+      state.isDrawing = true;
+      const { x, y } = getCellCoords(e);
+      if (x >= 0 && x < state.cols && y >= 0 && y < state.rows) {
+        // Toggle mode based on initial cell clicked
+        state.drawMode = state.grid[x][y] === 1 ? 0 : 1;
+        state.grid[x][y] = state.drawMode;
+        updateStats();
+        draw();
+      }
+    }
+
+    function handleMoveDraw(e) {
+      if (!state.isDrawing) return;
+      const { x, y } = getCellCoords(e);
+      if (x >= 0 && x < state.cols && y >= 0 && y < state.rows) {
+        if (state.grid[x][y] !== state.drawMode) {
+          state.grid[x][y] = state.drawMode;
+          updateStats();
+          draw();
+        }
+      }
+    }
+
+    function handleEndDraw() {
+      state.isDrawing = false;
+    }
+
+    // Attach Canvas Events
+    canvas.addEventListener('mousedown', handleStartDraw);
+    window.addEventListener('mousemove', handleMoveDraw);
+    window.addEventListener('mouseup', handleEndDraw);
+
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      handleStartDraw(e);
+    }, { passive: false });
+    window.addEventListener('touchmove', handleMoveDraw, { passive: true });
+    window.addEventListener('touchend', handleEndDraw);
+
+    // Event Listeners for Controls
+    btnPlay.addEventListener('click', () => setRunning(!state.isRunning));
+    btnStep.addEventListener('click', () => {
+      setRunning(false);
+      step();
+    });
+    btnRandom.addEventListener('click', () => {
+      setRunning(false);
+      randomize();
+    });
+    btnClear.addEventListener('click', () => {
+      setRunning(false);
+      clearGrid();
+    });
+
+    // Speed Slider
+    speedSlider.addEventListener('input', (e) => {
+      state.fps = parseInt(e.target.value, 10);
+      speedDisplay.textContent = `${state.fps} FPS`;
+    });
+
+    // Density Slider
+    densitySlider.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      state.randomDensity = val / 100;
+      densityDisplay.textContent = `${val}%`;
+    });
+
+    // Cell Size Slider
+    cellSizeSlider.addEventListener('input', (e) => {
+      cellSizeDisplay.textContent = `${e.target.value}px`;
+    });
+
+    // Boundary toggles
+    boundaryTorusBtn.addEventListener('click', () => {
+      state.boundary = 'torus';
+      boundaryTorusBtn.classList.replace('text-slate-400', 'text-cyan-300');
+      boundaryTorusBtn.classList.replace('border-slate-700', 'border-cyan-500/50');
+      boundaryTorusBtn.classList.replace('bg-slate-800/60', 'bg-cyan-950/60');
+
+      boundaryDeadBtn.classList.replace('text-cyan-300', 'text-slate-400');
+      boundaryDeadBtn.classList.replace('border-cyan-500/50', 'border-slate-700');
+      boundaryDeadBtn.classList.replace('bg-cyan-950/60', 'bg-slate-800/60');
+    });
+
+    boundaryDeadBtn.addEventListener('click', () => {
+      state.boundary = 'dead';
+      boundaryDeadBtn.classList.replace('text-slate-400', 'text-cyan-300');
+      boundaryDeadBtn.classList.replace('border-slate-700', 'border-cyan-500/50');
+      boundaryDeadBtn.classList.replace('bg-slate-800/60', 'bg-cyan-950/60');
+
+      boundaryTorusBtn.classList.replace('text-cyan-300', 'text-slate-400');
+      boundaryTorusBtn.classList.replace('border-cyan-500/50', 'border-slate-700');
+      boundaryTorusBtn.classList.replace('bg-cyan-950/60', 'bg-slate-800/60');
+    });
+
+    // Preset buttons
+    presetBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const pattern = btn.getAttribute('data-pattern');
+        loadPreset(pattern);
+      });
+    });
+
+    // Apply Grid Size
+    btnApplyGrid.addEventListener('click', () => {
+      setRunning(false);
+      initGrid();
+    });
+
+    // Theme Selector
+    selectTheme.addEventListener('change', (e) => {
+      state.theme = e.target.value;
+      draw();
+    });
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setRunning(!state.isRunning);
+      } else if (e.code === 'KeyS') {
+        setRunning(false);
+        step();
+      } else if (e.code === 'KeyR') {
+        setRunning(false);
+        randomize();
+      } else if (e.code === 'KeyC') {
+        setRunning(false);
+        clearGrid();
+      }
+    });
+
+    // Initialization
+    window.onload = function() {
+      initGrid();
+      loadPreset('glider'); // load a friendly default preset
+    };
+  </script>
+</body>
+</html>
